@@ -1,16 +1,41 @@
-<script setup>
+<script lang="ts">
 import { ref } from 'vue';
-import { chat_camp_backend } from 'declarations/chat-camp-backend/index';
-let greeting = ref('');
+import { createActor, canisterId } from '../../declarations/chat-camp-backend/index';
+import { AuthClient } from '@dfinity/auth-client';
+import { HttpAgent, type Identity } from '@dfinity/agent';
 
-async function handleSubmit(e) {
-  e.preventDefault();
-  const target = e.target;
-  const name = target.querySelector('#name').value;
-  await chat_camp_backend.greet(name).then((response) => {
-    greeting.value = response;
-  });
+export default {
+  data() {
+    return {
+      newNote: "",
+      notes: [] as string[],
+      identity: undefined as Identity | undefined,
+      backend: createActor(canisterId)
+    }
+  },
+  methods: {
+    async addNote() {
+      await this.backend.add_note(this.newNote);
+      this.newNote = ""
+      await this.getNotes();
+    },
+    async getNotes() {
+    },
+    async login() {
+      const authClient = await AuthClient.create();
+      await authClient.login({
+        identityProvider: "http://a3shf-5eaaa-aaaaa-qaafa-cai.localhost:4943/",
+      });
+      this.identity = authClient.getIdentity();
+      const agent = await HttpAgent.create({ identity: this.identity })
+      this.backend = createActor(canisterId, { agent })
+    }
+  },
+  mounted() {
+    this.getNotes()
+  },
 }
+
 </script>
 
 <template>
@@ -18,11 +43,14 @@ async function handleSubmit(e) {
     <img src="/logo2.svg" alt="DFINITY logo" />
     <br />
     <br />
-    <form action="#" @submit="handleSubmit">
-      <label for="name">Enter your name: &nbsp;</label>
-      <input id="name" alt="Name" type="text" />
-      <button type="submit">Click Me!</button>
-    </form>
-    <section id="greeting">{{ greeting }}</section>
+    <button @click="login">Login</button>
+    {{ identity?.getPrincipal() }}
+    <div v-for="note in notes">
+      <p>{{ note }}</p>
+    </div>
+    <div>
+      <textarea v-model="newNote"></textarea>
+      <button @click="addNote">Dodaj notke</button>
+    </div>
   </main>
 </template>
