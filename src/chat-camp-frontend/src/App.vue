@@ -4,6 +4,7 @@ import { AuthClient } from '@dfinity/auth-client';
 import { type Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { watch, watchEffect } from 'vue';
+import type { UserData } from '../../declarations/chat-camp-backend/chat-camp-backend.did';
 
 export default {
   data() {
@@ -13,6 +14,9 @@ export default {
       identity: undefined as Identity | undefined,
       backend: createActor(canisterId),
       recipient: "",
+      userData: undefined as UserData | undefined,
+      usernameInput: "",
+      users: [] as [Principal, UserData][]
     }
   },
   methods: {
@@ -40,8 +44,18 @@ export default {
         onSuccess: async () => {
           this.identity = authClient.getIdentity();
           this.backend = createActor(canisterId, { agentOptions: { identity: this.identity } })
+
+          await this.getUserData()
+          await this.backend.get_users()
         },
       });
+    },
+    async logout() {
+      const authClient = await AuthClient.create();
+      authClient.logout();
+      this.identity = undefined;
+      this.backend = createActor(canisterId);
+      this.chat = [];
     },
     isLoggedIn() {
       return !!this.identity && !this.identity.getPrincipal().isAnonymous()
@@ -57,7 +71,27 @@ export default {
 
       return principal
     },
+    getAvatarUrl(user: UserData | undefined) {
+      if (!user) return;
+      const [url] = user.avatar_url;
+      return url;
+    },
+    async register() {
+      await this.backend.register(this.usernameInput.trim())
+      this.userData = { name: this.usernameInput.trim(), avatar_url: [] }
+      await this.getUserData();
+    },
+    async getUserData() {
+      if (!this.isLoggedIn()) {
+        throw "Anon"
+      }
+      const [userData] = await this.backend.get_user_data(this.identity!.getPrincipal())
+      this.userData = userData;
+    },
   },
+  async mounted() {
+    this.users = await this.backend.get_users();
+  }
 }
 </script>
 
@@ -80,29 +114,49 @@ nav .nav-end {
   display: flex;
   justify-content: flex-end;
 }
+
+main {
+  display: grid;
+  grid-template-columns: 0.1fr 1fr;
+}
+
+.userList>select {
+  width: 100%;
+}
 </style>
 
 <template>
   <header>
     <nav>
       <div class="nav-start">
-        <i class="fa-regular fa-user"></i>
-        {{ identity?.getPrincipal() ? identity.getPrincipal() : "Not logged in" }}
+        <i class="fa-regular fa-user" v-if="getAvatarUrl(userData) == undefined"></i>
+        <img alt="" width="15" height="15" v-if="getAvatarUrl(userData) != undefined" :src="getAvatarUrl">
+        <p v-if="isLoggedIn()">
+          {{ userData?.name == undefined ? identity?.getPrincipal() : userData?.name }}
+        </p>
+        <p v-if="!isLoggedIn()"> Not logged in </p>
       </div>
       <div class="nav-center"></div>
       <div class="nav-end">
-        <button @click="login">Login</button>
+        <button @click="login" v-if="!isLoggedIn()">Login</button>
+        <button @click="logout" v-if="isLoggedIn()">Log out</button>
       </div>
     </nav>
   </header>
-  <main class="msgs">
+  <main class="main" v-if="isLoggedIn() && userData">
+    <div class="userList">
+      <select v-model="recipient">
+        <option value="" disabled>Please select one</option>
+        <option v-for="[principal, user] in users" :value="principal.toText()">
+          <img :src="getAvatarUrl(user)" alt="" v-if="user.avatar_url.length != 0" width="15" height="15"> <span>{{ user.name }}</span>
+        </option>
+      </select>
+    </div>
     <div class="add-note-form">
       <div>
-        <label for="recipient">Recipient</label>
-        <input type="text" id="recipient" v-model="recipient">
         <button @click="getChat">Refresh</button>
       </div>
-      <div v-for="msg in chat" class="note">
+      <div v-for="msg in chat" class="msgs">
         <p>{{ msg }}</p>
       </div>
       <div>
@@ -111,6 +165,13 @@ nav .nav-end {
       <div>
         <button @click="addMsg" :disabled="!isLoggedIn() || !isTalkingToSomeone()">Dodaj notke</button>
       </div>
+    </div>
+  </main>
+  <main v-if="isLoggedIn() && !userData">
+    <label for="Nickname">Nickname</label>
+    <input type="text" id="Nickname" v-model="usernameInput">
+    <div>
+      <button @click="register">Register</button>
     </div>
   </main>
 </template>

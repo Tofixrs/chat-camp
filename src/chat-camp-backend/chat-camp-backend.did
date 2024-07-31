@@ -1,5 +1,13 @@
+type UserData = record {
+    name: text;
+    avatar_url: opt text;
+}
 
 service : {
     "get_chat": (principal) -> (opt vec text) query;
     "add_chat_msg": (text, principal) -> ();
+    "register": (text) -> ();
+    "update_user_data": (opt text, opt text) -> ();
+    "get_user_data": (principal) -> (opt UserData) query;
+    "get_users": () -> (vec record {principal; UserData}) query;
 }
