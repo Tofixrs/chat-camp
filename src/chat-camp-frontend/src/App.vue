@@ -4,19 +4,20 @@ import { AuthClient } from '@dfinity/auth-client';
 import { type Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { watch, watchEffect } from 'vue';
-import type { UserData } from '../../declarations/chat-camp-backend/chat-camp-backend.did';
+import type { Message, UserData } from '../../declarations/chat-camp-backend/chat-camp-backend.did';
 
 export default {
   data() {
     return {
       newMsg: "",
-      chat: [] as string[],
+      chat: [] as Message[],
       identity: undefined as Identity | undefined,
       backend: createActor(canisterId),
       recipient: "",
+      recipientUserData: undefined as UserData | undefined,
       userData: undefined as UserData | undefined,
       usernameInput: "",
-      users: [] as [Principal, UserData][]
+      users: [] as [Principal, UserData][],
     }
   },
   methods: {
@@ -88,9 +89,22 @@ export default {
       const [userData] = await this.backend.get_user_data(this.identity!.getPrincipal())
       this.userData = userData;
     },
+    getAuthorName(principal: Principal) {
+      if (principal == this.identity?.getPrincipal()) {
+        return this.userData?.name
+      }
+      return this.recipientUserData?.name
+    }
   },
   async mounted() {
     this.users = await this.backend.get_users();
+  },
+  watch: {
+    async recipient(_: string, newRecipient: string) {
+      if (newRecipient == "") return;
+      const [data] = await this.backend.get_user_data(Principal.fromText(newRecipient));
+      this.recipientUserData = data;
+    }
   }
 }
 </script>
@@ -156,8 +170,11 @@ main {
       <div>
         <button @click="getChat">Refresh</button>
       </div>
-      <div v-for="msg in chat" class="msgs">
-        <p>{{ msg }}</p>
+      <div class="msgs">
+        <div class="msg" v-for="msg in chat">
+          <p>{{ getAuthorName(msg.author as Principal /*ts being weird*/) }} {{ new Date(Number(msg.timestamp) / 1000000).toString() }}</p>
+          <p>{{ msg.content }}</p>
+        </div>
       </div>
       <div>
         <textarea v-model="newMsg"></textarea>
