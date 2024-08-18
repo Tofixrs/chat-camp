@@ -29,7 +29,6 @@ fn get_chat(user_chat: Principal) -> Option<Vec<Message>> {
     key.sort();
     CHAT.with_borrow(|chats| {
         let chat = chats.get(&key).cloned();
-        ic_cdk::println!("{:?}", chat);
         return chat;
     })
 }
